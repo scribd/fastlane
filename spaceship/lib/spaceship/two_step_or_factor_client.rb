@@ -1,5 +1,7 @@
 require_relative 'globals'
 require_relative 'tunes/tunes_client'
+require "colored"
+require "json"
 
 module Spaceship
   class Client
@@ -15,6 +17,13 @@ module Spaceship
         update_request_headers(req)
       end
 
+      # handle any errors
+      if r.body.kind_of?(Hash) && r.body["serviceErrors"].kind_of?(Array) && r.body["serviceErrors"].first.kind_of?(Hash)
+        puts("Login Error: #{r.body["serviceErrors"].first["message"]}".red)
+        exit 1
+      end
+
+      # treat as two step or two factor
       if r.body.kind_of?(Hash) && r.body["trustedDevices"].kind_of?(Array)
         handle_two_step(r)
       elsif r.body.kind_of?(Hash) && r.body["trustedPhoneNumbers"].kind_of?(Array) && r.body["trustedPhoneNumbers"].first.kind_of?(Hash)
@@ -109,6 +118,28 @@ module Spaceship
       return true
     end
 
+    # resumes an authentication session when '--resume_with_2fa' is passed
+    def resume_with_2fa(code, code_type = 'sms')
+      path = self.persistent_resume_path
+      if !File.exist?(path)
+        puts("No existing login attempt found for #{self.user}. Please begin login by using the `--exit_after_sending_2fa` option.".red)
+        return false
+      end
+
+      resume_data = JSON.parse(File.read(path))
+      @x_apple_id_session_id = resume_data["x_apple_id_session_id"]
+      @scnt = resume_data["scnt"]
+      phone_id = resume_data["phone_id"]
+      
+      body = { "securityCode" => { "code" => code.to_s }, "phoneNumber" => { "id" => phone_id }, "mode" => code_type }.to_json
+      device_type = code_type == 'sms' ? 'phone' : 'trusteddevice'
+      if continue_auth_with_2fa(body, device_type)
+        File.delete(path)
+        return true
+      end
+      return false
+    end
+
     def handle_two_factor(response, depth = 0)
       if depth == 0
         puts("Two-factor Authentication (6 digits code) is enabled for account '#{self.user}'")
@@ -179,7 +210,10 @@ module Spaceship
       end
 
       puts("Requesting session...")
+      continue_auth_with_2fa(body, code_type, response, depth)
+    end
 
+    def continue_auth_with_2fa(body, code_type, response = nil, depth = 0)
       # Send "verification code" back to server to get a valid session
       r = request(:post) do |req|
         req.url("https://idmsa.apple.com/appleauth/auth/verify/#{code_type}/securitycode")
@@ -203,7 +237,10 @@ module Spaceship
         #   "hasError": true
         # }
 
-        if ex.to_s.include?("verification code") # to have a nicer output
+        if ex.to_s.include?("Too many")
+          puts("Error: Too many verification codes sent. Please wait and try again later.".red)
+          return false
+        elsif ex.to_s.include?("verification code") # to have a nicer output
           puts("Error: Incorrect verification code")
           depth += 1
           return handle_two_factor(response, depth)
@@ -337,6 +374,14 @@ If it is, please open an issue at https://github.com/fastlane/fastlane/issues/ne
         Spaceship::TunesClient.new.handle_itc_response(r.body)
 
         puts("Successfully requested text message to #{phone_number}")
+      end
+
+      # if the '--exit_after_sending_2fa' flag is passed then it is time to leave
+      if Spaceship::Globals.exit_after_sending_2fa
+        # save scnt and session id for later usage
+        File.write(self.persistent_resume_path, { "scnt" => @scnt, "x_apple_id_session_id" => @x_apple_id_session_id, "phone_id" => phone_id }.to_json)
+        puts("2FA message sent. Exiting".green)
+        exit 0
       end
 
       code = ask_for_2fa_code("Please enter the #{code_length} digit code you received at #{phone_number}:")

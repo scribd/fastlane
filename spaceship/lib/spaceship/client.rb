@@ -289,22 +289,34 @@ module Spaceship
       return path
     end
 
-    # Returns preferred path for storing cookie
+    # Returns preferred path for user files
     # for two step verification.
-    def persistent_cookie_path
+    def persistent_user_path
       if ENV["SPACESHIP_COOKIE_PATH"]
-        path = File.expand_path(File.join(ENV["SPACESHIP_COOKIE_PATH"], "spaceship", self.user, "cookie"))
+        path = File.expand_path(File.join(ENV["SPACESHIP_COOKIE_PATH"], "spaceship", self.user))
       else
         [File.join(self.fastlane_user_dir, "spaceship"), "~/.spaceship", "/var/tmp/spaceship", "#{Dir.tmpdir}/spaceship"].each do |dir|
           dir_parts = File.split(dir)
           if directory_accessible?(File.expand_path(dir_parts.first))
-            path = File.expand_path(File.join(dir, self.user, "cookie"))
+            path = File.expand_path(File.join(dir, self.user))
+            FileUtils.mkdir_p(path) unless File.directory?(path)
             break
           end
         end
       end
-
       return path
+    end
+
+    # Returns preferred path for storing cookie
+    # for two step verification.
+    def persistent_cookie_path
+      return File.join(persistent_user_path(), 'cookie')
+    end
+
+    # Returns preferred path for storing the resume info
+    # for two step verification.
+    def persistent_resume_path
+      return File.join(persistent_user_path(), 'resume')
     end
 
     #####################################################
@@ -464,6 +476,15 @@ module Spaceship
 
       # If the session is valid no need to attempt to generate a new one.
       return true if has_valid_session
+
+      # If the login process was suspended, resume it now
+      if Spaceship::Globals.resume_with_2fa
+        if resume_with_2fa(Spaceship::Globals.resume_with_2fa)
+          fetch_olympus_session
+          return true
+        end
+        return false
+      end
 
       data = {
         accountName: user,
@@ -852,7 +873,7 @@ module Spaceship
     def do_login(user, password)
       @loggedin = false
       ret = send_login_request(user, password) # different in subclasses
-      @loggedin = true
+      @loggedin = ret
       ret
     end
 

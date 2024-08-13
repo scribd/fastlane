@@ -21,6 +21,7 @@ module Spaceship
         puts("Successfully logged in to App Store Connect".green)
         puts("")
       rescue => ex
+        raise ex if Spaceship::Globals.exit_after_sending_2fa
         puts("Could not login to App Store Connect".red)
         puts("Please check your credentials and try again.".yellow)
         puts("This could be an issue with App Store Connect,".yellow)
