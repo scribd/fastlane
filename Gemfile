@@ -38,7 +38,7 @@ gem "rspec", "~> 3.10"
 # Formatter for RSpec to generate JUnit compatible reports.
 gem "rspec_junit_formatter", "~> 0.4.1"
 # A Ruby static code analyzer and formatter.
-gem "rubocop", Fastlane::RUBOCOP_REQUIREMENT
+gem "rubocop", ">= 1.66.0", Fastlane::RUBOCOP_REQUIREMENT
 # A collection of RuboCop cops for performance optimizations.
 gem "rubocop-performance"
 # A RuboCop extension focused on enforcing tools.
