@@ -48,9 +48,9 @@ gem "sinatra", [">= 2.2.3", "< 3.0"]
 # A library for stubbing and setting expectations on HTTP requests.
 gem "webmock", "~> 3.18"
 # Needed for running xcode-install related tests.
-gem "xcode-install", ">= 2.6.7"
+gem "xcode-install", ">= 2.7.0"
 # Used for xcov's parameters generation: https://github.com/fastlane/fastlane/pull/12416
-gem "xcov", "~> 1.4.1"
+gem "xcov", "~> 1.5.0"
 # A documentation generation tool for Ruby.
 gem "yard", "~> 0.9.11"
 
